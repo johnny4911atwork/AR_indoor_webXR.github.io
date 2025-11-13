@@ -1,275 +1,265 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@r128/build/three.module.js';
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@r128/examples/jsm/loaders/GLTFLoader.js';
-import { XRButton } from 'https://cdn.jsdelivr.net/npm/three@r128/examples/jsm/webxr/XRButton.js';
-import { XRControllerModelFactory } from 'https://cdn.jsdelivr.net/npm/three@r128/examples/jsm/webxr/XRControllerModelFactory.js';
+import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
 
-// 全局變數
-let scene, camera, renderer;
-let controller;
-let waypoints = []; // 儲存所有訊號點
-let hitTestSource = null;
-let hitTestSourceRequested = false;
-let userPosition = new THREE.Vector3();
+let camera, scene, renderer;
+let session = null;
+let refSpace = null;
+let markers = [];
+let markerCount = 0;
 
-// UI 元素
-const addWaypointBtn = document.getElementById('add-waypoint-btn');
-const clearBtn = document.getElementById('clear-btn');
-const statusDiv = document.getElementById('status');
-const errorMessage = document.getElementById('error-message');
-const waypointCountSpan = document.getElementById('waypoint-count');
-const posXSpan = document.getElementById('pos-x');
-const posYSpan = document.getElementById('pos-y');
-const posZSpan = document.getElementById('pos-z');
+const startButton = document.getElementById('startButton');
+const placeMarkerButton = document.getElementById('placeMarkerButton');
+const info = document.getElementById('info');
+const markerCountDiv = document.getElementById('markerCount');
+const debugDiv = document.getElementById('debug');
 
-/**
- * 初始化 Three.js 場景
- */
-function initScene() {
-    // 創建場景
+function log(msg) {
+    console.log(msg);
+    debugDiv.innerHTML += msg + '<br>';
+    debugDiv.style.display = 'block';
+}
+
+// 初始化場景
+function init() {
     scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+    
+    // 添加環境光
+    const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+    light.position.set(0.5, 1, 0.25);
+    scene.add(light);
 
-    // 創建相機
-    camera = new THREE.PerspectiveCamera(
-        75,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        1000
-    );
-
-    // 創建渲染器
-    const canvas = document.getElementById('canvas');
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, canvas });
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
-
-    // 添加光線
-    const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-    scene.add(light);
-
-    // 添加 WebXR 按鈕
-    document.body.appendChild(XRButton.createButton(renderer, {
-        requiredFeatures: ['hit-test', 'dom-overlay', 'dom-overlay-for-handheld-ar'],
-        optionalFeatures: ['hit-test-legacy'],
-        domOverlay: { root: document.body }
-    }));
-
-    // 設置動畫循環
-    renderer.xr.addEventListener('sessionstart', onSessionStart);
-    renderer.xr.addEventListener('sessionend', onSessionEnd);
-    renderer.setAnimationLoop(animate);
-
-    // 監聽視窗大小變化
-    window.addEventListener('resize', onWindowResize);
-}
-
-/**
- * 當 XR 會話開始時
- */
-async function onSessionStart() {
-    console.log('XR 會話已開始');
-    statusDiv.textContent = 'AR 已啟動';
-
-    const session = renderer.xr.getSession();
     
-    // 請求 HitTest 源
-    if (session.requestHitTestSource) {
-        const space = await session.requestReferenceSpace('viewer');
-        hitTestSource = await session.requestHitTestSource({ space });
-        hitTestSourceRequested = true;
-    }
-
-    // 添加初始訊號點
-    addWaypointAtScreenCenter();
+    document.getElementById('container').appendChild(renderer.domElement);
+    
+    log('Three.js initialized');
 }
 
-/**
- * 當 XR 會話結束時
- */
-function onSessionEnd() {
-    console.log('XR 會話已結束');
-    hitTestSourceRequested = false;
-    hitTestSource = null;
-    statusDiv.textContent = 'AR 已關閉';
-}
-
-/**
- * 創建訊號點視覺化模型
- */
-function createWaypointVisual() {
+// 創建訊號點標記
+function createMarker(number) {
     const group = new THREE.Group();
 
-    // 創建中心球體
-    const sphereGeometry = new THREE.SphereGeometry(0.05, 32, 32);
-    const sphereMaterial = new THREE.MeshStandardMaterial({
-        color: 0x4CAF50,
-        emissive: 0x4CAF50,
-        emissiveIntensity: 0.5,
-        metalness: 0.5,
-        roughness: 0.5
+    // 底座圓盤 - 加大並增加發光效果
+    const baseGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.03, 32);
+    const baseMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x2196F3,
+        emissive: 0x2196F3,
+        emissiveIntensity: 0.8,
+        shininess: 100
+    });
+    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    group.add(base);
+
+    // 中心圓柱 - 加粗並增加發光
+    const poleGeometry = new THREE.CylinderGeometry(0.03, 0.03, 0.4, 16);
+    const poleMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0xFFEB3B,
+        emissive: 0xFFEB3B,
+        emissiveIntensity: 0.9
+    });
+    const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+    pole.position.y = 0.2;
+    group.add(pole);
+
+    // 頂部球體 - 加大
+    const sphereGeometry = new THREE.SphereGeometry(0.08, 16, 16);
+    const sphereMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0xFF5722,
+        emissive: 0xFF5722,
+        emissiveIntensity: 1.0
     });
     const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+    sphere.position.y = 0.45;
     group.add(sphere);
 
-    // 創建光暈環
-    const ringGeometry = new THREE.TorusGeometry(0.1, 0.01, 16, 100);
-    const ringMaterial = new THREE.MeshStandardMaterial({
-        color: 0x4CAF50,
-        emissive: 0x4CAF50,
-        emissiveIntensity: 0.8
-    });
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.rotation.x = Math.PI / 2;
-    group.add(ring);
+    // 編號文字平面
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'Bold 80px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(number.toString(), 64, 64);
 
-    // 創建垂直線（連接到地面）
-    const lineGeometry = new THREE.BufferGeometry();
-    lineGeometry.setAttribute('position', new THREE.BufferAttribute(
-        new Float32Array([0, 0, 0, 0, -0.5, 0]),
-        3
-    ));
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x4CAF50, linewidth: 2 });
-    const line = new THREE.Line(lineGeometry, lineMaterial);
-    group.add(line);
+    const texture = new THREE.CanvasTexture(canvas);
+    const textMaterial = new THREE.MeshBasicMaterial({ 
+        map: texture, 
+        transparent: true,
+        side: THREE.DoubleSide
+    });
+    const textGeometry = new THREE.PlaneGeometry(0.15, 0.15);
+    const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+    textMesh.position.y = 0.15;
+    textMesh.rotation.x = -Math.PI / 2;
+    textMesh.position.z = 0.001;
+    group.add(textMesh);
 
     return group;
 }
 
-/**
- * 添加訊號點到場景
- */
-function addWaypoint(position) {
-    const visual = createWaypointVisual();
-    visual.position.copy(position);
-    scene.add(visual);
+// 放置訊號點
+function placeMarker() {
+    if (!session || !refSpace) {
+        log('Session or refSpace not available');
+        info.textContent = '請先啟動 AR 模式';
+        return;
+    }
 
-    const waypoint = {
-        position: position.clone(),
-        visual: visual,
-        timestamp: new Date().toLocaleTimeString('zh-tw')
-    };
-
-    waypoints.push(waypoint);
-    updateUI();
-
-    console.log(`訊號點已添加: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
+    markerCount++;
+    const marker = createMarker(markerCount);
+    
+    // 根據相機當前的位置和方向放置標記
+    // 在相機前方 1.5 米處,接近地面
+    const forward = new THREE.Vector3(0, 0, -1);
+    forward.applyQuaternion(camera.quaternion);
+    forward.y = 0; // 保持在水平面上
+    forward.normalize();
+    
+    marker.position.copy(camera.position);
+    marker.position.add(forward.multiplyScalar(1.5)); // 前方 1.5 米
+    marker.position.y = camera.position.y - 1.2; // 地面高度 (相機下方約 1.2 米)
+    
+    scene.add(marker);
+    markers.push(marker);
+    
+    updateMarkerCount();
+    info.textContent = `已放置訊號點 #${markerCount} (前方 1.5m)`;
+    log(`Marker ${markerCount} placed at (${marker.position.x.toFixed(2)}, ${marker.position.y.toFixed(2)}, ${marker.position.z.toFixed(2)})`);
+    log(`Camera at (${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`);
 }
 
-/**
- * 在屏幕中心放置訊號點
- */
-function addWaypointAtScreenCenter() {
-    // 使用相機前方一定距離的位置
-    const distance = 1.0;
-    const position = new THREE.Vector3(0, -0.5, -distance);
-    const worldPosition = new THREE.Vector3();
-
-    camera.getWorldPosition(worldPosition);
-    const cameraForward = new THREE.Vector3(0, 0, -1);
-    cameraForward.applyQuaternion(camera.quaternion);
-    cameraForward.multiplyScalar(distance);
-
-    worldPosition.add(cameraForward);
-    worldPosition.y = -0.5; // 放在地面
-
-    addWaypoint(worldPosition);
+function updateMarkerCount() {
+    markerCountDiv.textContent = `訊號點數量: ${markerCount}`;
 }
 
-/**
- * 清除所有訊號點
- */
-function clearWaypoints() {
-    waypoints.forEach(waypoint => {
-        scene.remove(waypoint.visual);
-    });
-    waypoints = [];
-    updateUI();
-    console.log('所有訊號點已清除');
-}
+// 開始 AR 會話
+async function startAR() {
+    log('Starting AR...');
+    
+    if (!navigator.xr) {
+        info.textContent = '您的裝置不支援 WebXR';
+        log('ERROR: WebXR not supported');
+        return;
+    }
 
-/**
- * 更新 UI 顯示
- */
-function updateUI() {
-    waypointCountSpan.textContent = waypoints.length;
+    try {
+        log('Checking AR support...');
+        const supported = await navigator.xr.isSessionSupported('immersive-ar');
+        log(`AR supported: ${supported}`);
+        
+        if (!supported) {
+            info.textContent = '您的裝置不支援 AR 模式';
+            return;
+        }
 
-    if (waypoints.length > 0) {
-        const lastWaypoint = waypoints[waypoints.length - 1];
-        posXSpan.textContent = lastWaypoint.position.x.toFixed(2);
-        posYSpan.textContent = lastWaypoint.position.y.toFixed(2);
-        posZSpan.textContent = lastWaypoint.position.z.toFixed(2);
+        log('Requesting AR session...');
+        session = await navigator.xr.requestSession('immersive-ar', {
+            requiredFeatures: [],
+            optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
+        });
+        log('AR session created');
+
+        log('Setting XR session to renderer...');
+        await renderer.xr.setSession(session);
+        log('Renderer XR session set');
+
+        // 嘗試不同的參考空間
+        try {
+            log('Trying local-floor...');
+            refSpace = await session.requestReferenceSpace('local-floor');
+            log('Using local-floor reference space');
+        } catch (e) {
+            log('local-floor failed, trying local...');
+            try {
+                refSpace = await session.requestReferenceSpace('local');
+                log('Using local reference space');
+            } catch (e2) {
+                log('local failed, trying unbounded...');
+                try {
+                    refSpace = await session.requestReferenceSpace('unbounded');
+                    log('Using unbounded reference space');
+                } catch (e3) {
+                    log('unbounded failed, using viewer...');
+                    refSpace = await session.requestReferenceSpace('viewer');
+                    log('Using viewer reference space');
+                }
+            }
+        }
+
+        session.addEventListener('end', () => {
+            log('AR session ended');
+            session = null;
+            refSpace = null;
+            startButton.style.display = 'block';
+            placeMarkerButton.style.display = 'none';
+            markerCountDiv.style.display = 'none';
+            info.textContent = 'AR 已結束';
+        });
+
+        startButton.style.display = 'none';
+        placeMarkerButton.style.display = 'block';
+        markerCountDiv.style.display = 'block';
+        info.textContent = '移動到想要的位置後,點擊「放置訊號點」';
+
+        log('Starting animation loop...');
+        renderer.setAnimationLoop(render);
+        log('AR started successfully!');
+    } catch (err) {
+        info.textContent = 'AR 啟動失敗: ' + err.message;
+        log('ERROR: ' + err.message);
+        log('Stack: ' + err.stack);
     }
 }
 
-/**
- * 顯示錯誤訊息
- */
-function showError(message) {
-    errorMessage.textContent = message;
-    errorMessage.style.display = 'block';
-    setTimeout(() => {
-        errorMessage.style.display = 'none';
-    }, 3000);
-}
-
-/**
- * 處理視窗大小變化
- */
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-/**
- * 動畫循環
- */
-function animate(time, frame) {
-    // 更新用戶位置（相機位置）
-    camera.getWorldPosition(userPosition);
-    posXSpan.textContent = userPosition.x.toFixed(2);
-    posYSpan.textContent = userPosition.y.toFixed(2);
-    posZSpan.textContent = userPosition.z.toFixed(2);
-
-    // 執行 HitTest（用於地面檢測）
-    if (hitTestSourceRequested && frame) {
-        const hitTestResults = frame.getHitTestResults(hitTestSource);
-
-        if (hitTestResults.length > 0) {
-            // 可以在此處添加視覺反饋（例如光標）
+function render(timestamp, frame) {
+    if (frame && refSpace) {
+        const pose = frame.getViewerPose(refSpace);
+        if (pose) {
+            // 更新相機位置以便放置標記時使用
+            const view = pose.views[0];
+            camera.matrix.fromArray(view.transform.matrix);
+            camera.matrix.decompose(camera.position, camera.quaternion, camera.scale);
         }
     }
-
     renderer.render(scene, camera);
 }
 
-/**
- * 事件監聽器
- */
-addWaypointBtn.addEventListener('click', () => {
-    if (!hitTestSourceRequested) {
-        showError('請先啟動 AR 模式');
+// 檢查 WebXR 支援
+async function checkWebXRSupport() {
+    if (!navigator.xr) {
+        info.textContent = '❌ 您的瀏覽器不支援 WebXR';
+        log('WebXR not available');
         return;
     }
-    addWaypointAtScreenCenter();
-});
 
-clearBtn.addEventListener('click', () => {
-    if (waypoints.length === 0) {
-        showError('沒有訊號點可清除');
-        return;
+    log('WebXR available, checking AR support...');
+    
+    try {
+        const arSupported = await navigator.xr.isSessionSupported('immersive-ar');
+        
+        if (arSupported) {
+            info.textContent = '✅ 您的裝置支援 AR,點擊開始';
+            startButton.style.display = 'block';
+            log('AR is supported!');
+        } else {
+            info.textContent = '❌ 您的裝置不支援 AR 模式';
+            log('AR not supported on this device');
+        }
+    } catch (err) {
+        info.textContent = '❌ 檢查 AR 支援時發生錯誤';
+        log('ERROR checking AR support: ' + err.message);
     }
-    clearWaypoints();
-});
+}
+
+// 事件監聽
+startButton.addEventListener('click', startAR);
+placeMarkerButton.addEventListener('click', placeMarker);
 
 // 初始化
-window.addEventListener('load', () => {
-    console.log('頁面已加載，正在初始化...');
-    try {
-        initScene();
-        statusDiv.textContent = '點擊 "進入 AR" 開始';
-    } catch (error) {
-        console.error('初始化失敗:', error);
-        showError('初始化失敗: ' + error.message);
-    }
-});
+init();
+checkWebXRSupport();
