@@ -1,168 +1,150 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-tw">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="//cdn.jsdelivr.net/npm/eruda"></script>
     <script>eruda.init();</script>
-    <script type="module" src="src/index_marker.js"></script>
-    <title>WebXR AR 訊號點標記</title>
+    <title>AR 路徑標記應用</title>
     <style>
-        body {
+        * {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            width: 100%;
+            height: 100vh;
             overflow: hidden;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #000;
         }
 
-        #info {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 15px 20px;
-            border-radius: 10px;
-            font-size: 14px;
-            z-index: 100;
-            max-width: 250px;
-            backdrop-filter: blur(10px);
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
         }
 
-        #info h3 {
-            margin: 0 0 10px 0;
-            font-size: 16px;
-            color: #4CAF50;
-        }
-
-        #info p {
-            margin: 5px 0;
-            line-height: 1.5;
-        }
-
-        #controls {
-            position: fixed;
+        #ui-container {
+            position: absolute;
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
+            z-index: 100;
             display: flex;
             gap: 15px;
-            z-index: 100;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px 30px;
+            border-radius: 15px;
         }
 
         button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 15px 30px;
+            padding: 12px 24px;
             font-size: 16px;
-            font-weight: bold;
-            border-radius: 50px;
+            border: none;
+            border-radius: 8px;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
             transition: all 0.3s ease;
-            min-width: 140px;
-        }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        button:disabled {
-            background: linear-gradient(135deg, #999 0%, #666 100%);
-            cursor: not-allowed;
-            opacity: 0.5;
-        }
-
-        #start-button {
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
-        }
-
-        #start-button:hover {
-            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.6);
-        }
-
-        #marker-button {
-            background: linear-gradient(135deg, #FF6B6B 0%, #FF5252 100%);
-            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
-        }
-
-        #marker-button:hover {
-            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
-        }
-
-        .marker-count {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
             font-weight: bold;
-            display: inline-block;
-            margin-top: 5px;
+        }
+
+        #add-waypoint-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        #add-waypoint-btn:hover {
+            background-color: #45a049;
+            transform: scale(1.05);
+        }
+
+        #add-waypoint-btn:active {
+            transform: scale(0.95);
+        }
+
+        #clear-btn {
+            background-color: #f44336;
+            color: white;
+        }
+
+        #clear-btn:hover {
+            background-color: #da190b;
+            transform: scale(1.05);
         }
 
         #status {
-            position: fixed;
+            color: #ffffff;
+            font-size: 14px;
+            min-width: 200px;
+            text-align: center;
+        }
+
+        #info-panel {
+            position: absolute;
             top: 20px;
-            right: 20px;
+            left: 20px;
             background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 10px 15px;
-            border-radius: 8px;
-            font-size: 12px;
+            color: #fff;
+            padding: 15px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            max-width: 300px;
             z-index: 100;
-            backdrop-filter: blur(10px);
         }
 
-        .status-dot {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 8px;
-            animation: pulse 2s infinite;
+        #info-panel div {
+            margin: 5px 0;
         }
 
-        .status-active {
-            background: #4CAF50;
+        .label {
+            color: #4CAF50;
+            font-weight: bold;
         }
 
-        .status-inactive {
-            background: #f44336;
-        }
-
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.5;
-            }
+        #error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(244, 67, 54, 0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 200;
+            display: none;
+            max-width: 80%;
         }
     </style>
 </head>
 <body>
-    <div id="info">
-        <h3>📍 AR 訊號點標記</h3>
-        <p>已放置訊號點: <span class="marker-count" id="marker-count">0</span></p>
-        <p id="instruction">點擊「開始 AR」來啟動體驗</p>
+    <canvas id="canvas"></canvas>
+    
+    <div id="info-panel">
+        <div><span class="label">訊號點數量:</span> <span id="waypoint-count">0</span></div>
+        <div><span class="label">位置:</span></div>
+        <div style="margin-left: 10px;">
+            X: <span id="pos-x">--</span>
+        </div>
+        <div style="margin-left: 10px;">
+            Y: <span id="pos-y">--</span>
+        </div>
+        <div style="margin-left: 10px;">
+            Z: <span id="pos-z">--</span>
+        </div>
     </div>
 
-    <div id="status">
-        <span class="status-dot status-inactive" id="status-dot"></span>
-        <span id="status-text">未啟動</span>
+    <div id="ui-container">
+        <button id="add-waypoint-btn">📍 放置訊號點</button>
+        <button id="clear-btn">🗑️ 清除所有</button>
+        <div id="status">準備就緒</div>
     </div>
 
-    <div id="controls">
-        <button id="start-button">🚀 開始 AR</button>
-        <button id="marker-button" disabled>📍 放置訊號點</button>
-    </div>
+    <div id="error-message"></div>
 
+    <script src="src/index_waypoint.js"></script>
 </body>
 </html>
