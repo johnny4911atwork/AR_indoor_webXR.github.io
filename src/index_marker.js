@@ -179,28 +179,17 @@ function animateMarkerAppearance(marker) {
 }
 
 // 放置標記
-function placeMarker(useCamera = false) {
-    let position = new THREE.Vector3();
-    
-    if (useCamera || !reticle || !reticle.visible) {
-        // 如果沒有 hit test 或瞄準圈不可見,在相機前方 1.5 米處放置
-        camera.getWorldPosition(position);
-        const direction = new THREE.Vector3(0, 0, -1);
-        direction.applyQuaternion(camera.quaternion);
-        direction.y = 0; // 保持在地平面
-        direction.normalize();
-        position.add(direction.multiplyScalar(1.5));
-        position.y = 0; // 設定在地面高度
-    } else {
-        // 使用 reticle 位置
+function placeMarker() {
+    if (reticle && reticle.visible) {
+        const position = new THREE.Vector3();
         position.setFromMatrixPosition(reticle.matrix);
+        
+        createMarker(position);
+        markerCount++;
+        updateUI();
+        
+        console.log(`訊號點 #${markerCount} 已放置在:`, position);
     }
-    
-    createMarker(position);
-    markerCount++;
-    updateUI();
-    
-    console.log(`訊號點 #${markerCount} 已放置在:`, position);
 }
 
 // 更新 UI
@@ -243,10 +232,10 @@ async function activateXR() {
 
         // 請求 XR Session
         xrSession = await navigator.xr.requestSession('immersive-ar', {
-                        requiredFeatures: ['local'],
-                        optionalFeatures: ['dom-overlay', 'hit-test', 'anchors'],
-                        domOverlay: { root: document.body }
-                    });
+            requiredFeatures: ['hit-test'],
+            optionalFeatures: ['dom-overlay'],
+            domOverlay: { root: document.body }
+        });
 
         // 設定 renderer
         await renderer.xr.setSession(xrSession);
@@ -258,7 +247,7 @@ async function activateXR() {
         startButton.textContent = '🛑 結束 AR';
         startButton.onclick = () => xrSession.end();
         markerButton.disabled = false;
-        instructionElement.textContent = '將相機對準地面,白色圓圈會顯示放置位置';
+        instructionElement.textContent = '將相機對準地面,等待白色圓圈出現後點擊「放置訊號點」';
         updateStatus(true, 'AR 已啟動');
 
         // 開始渲染循環
@@ -292,23 +281,24 @@ function render(timestamp, frame) {
     if (frame) {
         // 初始化 hit test source
         if (!hitTestSourceRequested) {
-            xrSession.requestReferenceSpace('local').then((referenceSpace) => {
-                xrSession.requestHitTestSource({ space: referenceSpace }).then((source) => {
-                    hitTestSource = source;
-                }).catch((error) => {
-                    console.error('Hit test source 請求失敗:', error);
-                    instructionElement.textContent = '此裝置不支援地面偵測功能';
-                });
+            const referenceSpace = renderer.xr.getReferenceSpace();
+            
+            // 使用 local 參考空間而不是 viewer
+            xrSession.requestHitTestSource({ 
+                space: referenceSpace,
+                entityTypes: ['plane'],
+                offsetRay: new XRRay({ z: -1 })
+            }).then((source) => {
+                hitTestSource = source;
             }).catch((error) => {
-                console.error('Reference space 請求失敗:', error);
-                instructionElement.textContent = '此裝置不支援所需的參考空間';
+                console.warn('Hit test source 請求失敗:', error);
             });
 
             hitTestSourceRequested = true;
         }
 
         // 執行 hit test
-        if (hitTestSource) {
+        if (hitTestSource && frame) {
             const hitTestResults = frame.getHitTestResults(hitTestSource);
 
             if (hitTestResults.length > 0) {
@@ -321,19 +311,12 @@ function render(timestamp, frame) {
 
                 // 第一次偵測到地面時,自動放置第一個標記
                 if (!firstMarkerPlaced) {
-                    placeMarker(false);
+                    placeMarker();
                     firstMarkerPlaced = true;
                     instructionElement.textContent = '第一個訊號點已放置!移動後可繼續放置更多訊號點';
                 }
             } else {
                 reticle.visible = false;
-            }
-        } else {
-            // 如果沒有 hit test,第一次進入時自動在相機前方放置標記
-            if (!firstMarkerPlaced && frame.session) {
-                placeMarker(true);
-                firstMarkerPlaced = true;
-                instructionElement.textContent = '第一個訊號點已放置!點擊按鈕在前方放置更多訊號點';
             }
         }
 
