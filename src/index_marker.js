@@ -292,7 +292,7 @@ function render(timestamp, frame) {
     if (frame) {
         // 初始化 hit test source
         if (!hitTestSourceRequested) {
-            xrSession.requestReferenceSpace('viewer').then((referenceSpace) => {
+            xrSession.requestReferenceSpace('local').then((referenceSpace) => {
                 xrSession.requestHitTestSource({ space: referenceSpace }).then((source) => {
                     hitTestSource = source;
                 }).catch((error) => {
