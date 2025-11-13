@@ -5,7 +5,6 @@ let session = null;
 let refSpace = null;
 let markers = [];
 let markerCount = 0;
-let frameCount = 0; // 用於控制日誌頻率
 
 const startButton = document.getElementById('startButton');
 const placeMarkerButton = document.getElementById('placeMarkerButton');
@@ -16,7 +15,6 @@ const debugDiv = document.getElementById('debug');
 function log(msg) {
     console.log(msg);
     debugDiv.innerHTML += msg + '<br>';
-    debugDiv.scrollTop = debugDiv.scrollHeight; // 自動滾動到底部
     debugDiv.style.display = 'block';
 }
 
@@ -34,6 +32,7 @@ function init() {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
+    renderer.domElement.style.pointerEvents = 'none';
     
     document.getElementById('container').appendChild(renderer.domElement);
     
@@ -44,8 +43,8 @@ function init() {
 function createMarker(number) {
     const group = new THREE.Group();
 
-    // 底座圓盤 - 大小調整
-    const baseGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.02, 32);
+    // 底座圓盤 - 加大並增加發光效果
+    const baseGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.03, 32);
     const baseMaterial = new THREE.MeshPhongMaterial({ 
         color: 0x2196F3,
         emissive: 0x2196F3,
@@ -53,29 +52,28 @@ function createMarker(number) {
         shininess: 100
     });
     const base = new THREE.Mesh(baseGeometry, baseMaterial);
-    base.position.y = 0; // 設置在基準高度
     group.add(base);
 
-    // 中心圓柱
-    const poleGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.3, 16);
+    // 中心圓柱 - 加粗並增加發光
+    const poleGeometry = new THREE.CylinderGeometry(0.03, 0.03, 0.4, 16);
     const poleMaterial = new THREE.MeshPhongMaterial({ 
         color: 0xFFEB3B,
         emissive: 0xFFEB3B,
         emissiveIntensity: 0.9
     });
     const pole = new THREE.Mesh(poleGeometry, poleMaterial);
-    pole.position.y = 0.15; // 從底座上方開始
+    pole.position.y = 0.2;
     group.add(pole);
 
-    // 頂部球體
-    const sphereGeometry = new THREE.SphereGeometry(0.06, 16, 16);
+    // 頂部球體 - 加大
+    const sphereGeometry = new THREE.SphereGeometry(0.08, 16, 16);
     const sphereMaterial = new THREE.MeshPhongMaterial({ 
         color: 0xFF5722,
         emissive: 0xFF5722,
         emissiveIntensity: 1.0
     });
     const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-    sphere.position.y = 0.35; // 圓柱頂部
+    sphere.position.y = 0.45;
     group.add(sphere);
 
     // 編號文字平面
@@ -95,11 +93,11 @@ function createMarker(number) {
         transparent: true,
         side: THREE.DoubleSide
     });
-    const textGeometry = new THREE.PlaneGeometry(0.12, 0.12);
+    const textGeometry = new THREE.PlaneGeometry(0.15, 0.15);
     const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-    textMesh.position.y = 0.08;
-    textMesh.position.z = 0.05;
-    textMesh.rotation.x = -Math.PI / 3; // 略微傾斜
+    textMesh.position.y = 0.15;
+    textMesh.rotation.x = -Math.PI / 2;
+    textMesh.position.z = 0.001;
     group.add(textMesh);
 
     return group;
@@ -116,20 +114,24 @@ function placeMarker() {
     markerCount++;
     const marker = createMarker(markerCount);
     
-    // 在場景的世界坐標系中，相對於相機前方放置標記
-    // 使用相機方向 (0, 0, -1) 代表相機正前方
-    const distance = 1.5; // 距離相機 1.5 米
+    // 根據相機當前的位置和方向放置標記
+    // 在相機前方 1.5 米處,接近地面
+    const forward = new THREE.Vector3(0, 0, -1);
+    forward.applyQuaternion(camera.quaternion);
+    forward.y = 0; // 保持在水平面上
+    forward.normalize();
     
-    // 從相機位置開始
-    marker.position.set(0, 0, -distance); // 相對於相機正前方
+    marker.position.copy(camera.position);
+    marker.position.add(forward.multiplyScalar(1.5)); // 前方 1.5 米
+    marker.position.y = camera.position.y - 1.2; // 地面高度 (相機下方約 1.2 米)
     
     scene.add(marker);
     markers.push(marker);
     
     updateMarkerCount();
-    info.textContent = `已放置訊號點 #${markerCount} (前方 ${distance}m)`;
-    log(`Marker ${markerCount} placed at local position (0, 0, -${distance})`);
-    log(`Total markers: ${markers.length}`);
+    info.textContent = `已放置訊號點 #${markerCount} (前方 1.5m)`;
+    log(`Marker ${markerCount} placed at (${marker.position.x.toFixed(2)}, ${marker.position.y.toFixed(2)}, ${marker.position.z.toFixed(2)})`);
+    log(`Camera at (${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`);
 }
 
 function updateMarkerCount() {
@@ -216,20 +218,13 @@ async function startAR() {
 }
 
 function render(timestamp, frame) {
-    frameCount++;
     if (frame && refSpace) {
         const pose = frame.getViewerPose(refSpace);
-        if (pose && pose.views.length > 0) {
-            // 重要：更新相機矩陣以匹配 XR viewer 的位置
+        if (pose) {
+            // 更新相機位置以便放置標記時使用
             const view = pose.views[0];
             camera.matrix.fromArray(view.transform.matrix);
-            camera.projectionMatrix.fromArray(view.projectionMatrix);
-            camera.matrixWorldNeedsUpdate = true;
-            
-            // 每 60 幀記錄一次位置
-            if (frameCount % 60 === 0) {
-                log(`Rendering frame ${frameCount}, markers: ${markers.length}`);
-            }
+            camera.matrix.decompose(camera.position, camera.quaternion, camera.scale);
         }
     }
     renderer.render(scene, camera);
