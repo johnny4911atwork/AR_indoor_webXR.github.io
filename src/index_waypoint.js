@@ -159,7 +159,8 @@ async function startAR() {
 
         log('Requesting AR session...');
         session = await navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: [],
+            requiredFeatures: ['dom-overlay'],
+            domOverlay: { root: document.getElementById('container') },
             optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
         });
         log('AR session created');
