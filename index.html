@@ -8,21 +8,26 @@
         body {
             margin: 0;
             font-family: Arial, sans-serif;
-            overflow: hidden;
         }
         #container {
-            position: relative;
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100vw;
             height: 100vh;
             pointer-events: none;
         }
-        #container canvas {
-            display: block;
+        #ui-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
+            z-index: 9999;
+            pointer-events: none;
         }
         #startButton, #placeMarkerButton {
-            position: fixed;
+            position: absolute;
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
@@ -42,7 +47,7 @@
             background: #2196F3;
         }
         #info {
-            position: fixed;
+            position: absolute;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
@@ -56,7 +61,7 @@
             pointer-events: none;
         }
         #markerCount {
-            position: fixed;
+            position: absolute;
             top: 100px;
             left: 50%;
             transform: translateX(-50%);
@@ -69,7 +74,7 @@
             pointer-events: none;
         }
         #debug {
-            position: fixed;
+            position: absolute;
             bottom: 100px;
             left: 10px;
             background: rgba(0,0,0,0.7);
@@ -87,11 +92,13 @@
 </head>
 <body>
     <div id="container">
-        <div id="info">檢查 WebXR 支援中...</div>
-        <div id="markerCount" style="display:none;">訊號點數量: 0</div>
-        <div id="debug"></div>
-        <button id="startButton" style="display:none;">開始 AR</button>
-        <button id="placeMarkerButton" style="display:none;">放置訊號點</button>
+        <div id="ui-layer">
+            <div id="info">檢查 WebXR 支援中...</div>
+            <div id="markerCount" style="display:none;">訊號點數量: 0</div>
+            <div id="debug"></div>
+            <button id="startButton" style="display:none;">開始 AR</button>
+            <button id="placeMarkerButton" style="display:none;">放置訊號點</button>
+        </div>
     </div>
 
     <script type="module" src="src/index_waypoint.js"></script>
