@@ -11,6 +11,7 @@ let markers = [];
 let markerCount = 0;
 let reticle = null;
 let firstMarkerPlaced = false;
+let referenceSpace = null;
 
 // UI 元素
 const startButton = document.getElementById('start-button');
@@ -22,15 +23,17 @@ const statusText = document.getElementById('status-text');
 
 // 初始化場景
 function init() {
+    console.log('初始化場景...');
+    
     // 建立場景
     scene = new THREE.Scene();
 
     // 建立相機
     camera = new THREE.PerspectiveCamera(
-        70,
+        75,
         window.innerWidth / window.innerHeight,
-        0.01,
-        20
+        0.1,
+        1000
     );
 
     // 建立環境光
@@ -40,12 +43,14 @@ function init() {
 
     // 建立 WebGL renderer
     renderer = new THREE.WebGLRenderer({
+        antialias: true,
         alpha: true,
-        antialias: true
+        preserveDrawingBuffer: true
     });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
+    renderer.xr.setFoveation(1);
     document.body.appendChild(renderer.domElement);
 
     // 建立瞄準圈 (reticle)
@@ -53,15 +58,18 @@ function init() {
 
     // 處理視窗大小調整
     window.addEventListener('resize', onWindowResize);
+    
+    console.log('場景初始化完成');
 }
 
 // 建立瞄準圈
 function createReticle() {
-    const geometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
+    const geometry = new THREE.RingGeometry(0.15, 0.2, 32);
+    geometry.rotateX(-Math.PI / 2);
     const material = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.5
+        opacity: 0.7
     });
     reticle = new THREE.Mesh(geometry, material);
     reticle.matrixAutoUpdate = false;
@@ -112,11 +120,6 @@ function createMarker(position) {
     disc.position.y = 0.01;
     markerGroup.add(disc);
 
-    // 編號文字 (使用簡單的幾何圖形)
-    const numberGroup = createNumberLabel(markerCount);
-    numberGroup.position.y = 0.5;
-    markerGroup.add(numberGroup);
-
     // 設定位置
     markerGroup.position.copy(position);
 
@@ -128,23 +131,6 @@ function createMarker(position) {
     animateMarkerAppearance(markerGroup);
 
     return markerGroup;
-}
-
-// 建立編號標籤
-function createNumberLabel(number) {
-    const group = new THREE.Group();
-    
-    // 背景圓盤
-    const bgGeometry = new THREE.CircleGeometry(0.08, 32);
-    const bgMaterial = new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        transparent: true,
-        opacity: 0.7
-    });
-    const bg = new THREE.Mesh(bgGeometry, bgMaterial);
-    group.add(bg);
-
-    return group;
 }
 
 // 標記出現動畫
@@ -217,35 +203,53 @@ function onWindowResize() {
 // 啟動 AR Session
 async function activateXR() {
     try {
+        console.log('開始啟動 AR...');
+        
         // 檢查瀏覽器支援
         if (!navigator.xr) {
+            updateStatus(false, '不支援 WebXR');
             alert('您的瀏覽器不支援 WebXR。請使用支援 AR 的瀏覽器(如 Chrome Android)。');
             return;
         }
 
         // 檢查 AR 支援
         const supported = await navigator.xr.isSessionSupported('immersive-ar');
+        console.log('AR 支援:', supported);
+        
         if (!supported) {
+            updateStatus(false, '不支援 AR');
             alert('您的裝置不支援 AR 功能。');
             return;
         }
 
         // 請求 XR Session
+        console.log('要求 XR Session...');
         xrSession = await navigator.xr.requestSession('immersive-ar', {
             requiredFeatures: ['hit-test'],
-            optionalFeatures: ['dom-overlay'],
+            optionalFeatures: ['dom-overlay', 'dom-overlay-for-handheld-ar'],
             domOverlay: { root: document.body }
         });
 
+        console.log('XR Session 已建立:', xrSession);
+
+        // 獲取參考空間
+        referenceSpace = await xrSession.requestReferenceSpace('local');
+        console.log('參考空間已建立:', referenceSpace);
+
         // 設定 renderer
         await renderer.xr.setSession(xrSession);
+        console.log('Renderer 已設定');
 
         // Session 結束時的處理
         xrSession.addEventListener('end', onSessionEnded);
 
         // 更新 UI
         startButton.textContent = '🛑 結束 AR';
-        startButton.onclick = () => xrSession.end();
+        startButton.onclick = () => {
+            if (xrSession) {
+                xrSession.end();
+            }
+        };
         markerButton.disabled = false;
         instructionElement.textContent = '將相機對準地面,等待白色圓圈出現後點擊「放置訊號點」';
         updateStatus(true, 'AR 已啟動');
@@ -255,17 +259,19 @@ async function activateXR() {
 
     } catch (error) {
         console.error('啟動 AR 時發生錯誤:', error);
+        updateStatus(false, '啟動失敗: ' + error.message);
         alert('啟動 AR 失敗: ' + error.message);
-        updateStatus(false, '啟動失敗');
     }
 }
 
 // Session 結束處理
 function onSessionEnded() {
+    console.log('AR Session 已結束');
     xrSession = null;
     hitTestSource = null;
     hitTestSourceRequested = false;
     firstMarkerPlaced = false;
+    referenceSpace = null;
 
     startButton.textContent = '🚀 開始 AR';
     startButton.onclick = activateXR;
@@ -278,64 +284,70 @@ function onSessionEnded() {
 
 // 渲染循環
 function render(timestamp, frame) {
-    if (frame) {
-        // 初始化 hit test source
-        if (!hitTestSourceRequested) {
-            const referenceSpace = renderer.xr.getReferenceSpace();
-            
-            // 使用 local 參考空間而不是 viewer
-            xrSession.requestHitTestSource({ 
-                space: referenceSpace,
-                entityTypes: ['plane'],
-                offsetRay: new XRRay({ z: -1 })
-            }).then((source) => {
-                hitTestSource = source;
-            }).catch((error) => {
-                console.warn('Hit test source 請求失敗:', error);
-            });
+    if (!frame) {
+        console.warn('frame 為空');
+        renderer.render(scene, camera);
+        return;
+    }
 
-            hitTestSourceRequested = true;
-        }
+    // 初始化 hit test source
+    if (!hitTestSourceRequested && referenceSpace) {
+        console.log('要求 Hit Test Source...');
+        
+        xrSession.requestHitTestSource({ 
+            space: referenceSpace
+        }).then((source) => {
+            console.log('Hit Test Source 已取得:', source);
+            hitTestSource = source;
+        }).catch((error) => {
+            console.warn('Hit test source 請求失敗:', error);
+        });
 
-        // 執行 hit test
-        if (hitTestSource && frame) {
-            const hitTestResults = frame.getHitTestResults(hitTestSource);
+        hitTestSourceRequested = true;
+    }
 
-            if (hitTestResults.length > 0) {
-                const hit = hitTestResults[0];
-                const pose = hit.getPose(renderer.xr.getReferenceSpace());
+    // 執行 hit test
+    if (hitTestSource) {
+        const hitTestResults = frame.getHitTestResults(hitTestSource);
 
+        if (hitTestResults.length > 0) {
+            const hit = hitTestResults[0];
+            const pose = hit.getPose(referenceSpace);
+
+            if (pose) {
                 // 更新瞄準圈位置
                 reticle.visible = true;
                 reticle.matrix.fromArray(pose.transform.matrix);
 
                 // 第一次偵測到地面時,自動放置第一個標記
                 if (!firstMarkerPlaced) {
+                    console.log('第一次偵測到地面,放置第一個標記');
                     placeMarker();
                     firstMarkerPlaced = true;
                     instructionElement.textContent = '第一個訊號點已放置!移動後可繼續放置更多訊號點';
                 }
-            } else {
-                reticle.visible = false;
             }
+        } else {
+            reticle.visible = false;
         }
-
-        // 為標記添加微微旋轉動畫
-        markers.forEach((marker, index) => {
-            // 頂部球體發光效果
-            const sphere = marker.children[1];
-            if (sphere) {
-                const pulseSpeed = 2;
-                const pulseIntensity = 0.3 + Math.sin(timestamp * 0.001 * pulseSpeed + index) * 0.2;
-                sphere.material.emissiveIntensity = pulseIntensity;
-            }
-        });
     }
+
+    // 為標記添加發光效果
+    markers.forEach((marker, index) => {
+        // 頂部球體發光效果
+        const sphere = marker.children[1];
+        if (sphere) {
+            const pulseSpeed = 2;
+            const pulseIntensity = 0.3 + Math.sin(timestamp * 0.001 * pulseSpeed + index) * 0.2;
+            sphere.material.emissiveIntensity = pulseIntensity;
+        }
+    });
 
     renderer.render(scene, camera);
 }
 
 // 初始化應用程式
+console.log('應用程式啟動中...');
 init();
 
 // 按鈕事件監聽
