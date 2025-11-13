@@ -11,7 +11,8 @@ let markers = [];
 let markerCount = 0;
 let reticle = null;
 let firstMarkerPlaced = false;
-let referenceSpace = null;
+let xrRefSpace = null;
+let isARActive = false;
 
 // UI 元素
 const startButton = document.getElementById('start-button');
@@ -23,7 +24,7 @@ const statusText = document.getElementById('status-text');
 
 // 初始化場景
 function init() {
-    console.log('初始化場景...');
+    console.log('開始初始化 WebXR 場景...');
     
     // 建立場景
     scene = new THREE.Scene();
@@ -41,11 +42,15 @@ function init() {
     light.position.set(0.5, 1, 0.25);
     scene.add(light);
 
+    // 建立平行光
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(5, 5, 5);
+    scene.add(directionalLight);
+
     // 建立 WebGL renderer
     renderer = new THREE.WebGLRenderer({
         antialias: true,
-        alpha: true,
-        preserveDrawingBuffer: true
+        alpha: true
     });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -53,28 +58,29 @@ function init() {
     renderer.xr.setFoveation(1);
     document.body.appendChild(renderer.domElement);
 
+    console.log('Renderer 已建立，xr.enabled:', renderer.xr.enabled);
+
     // 建立瞄準圈 (reticle)
     createReticle();
 
     // 處理視窗大小調整
     window.addEventListener('resize', onWindowResize);
-    
-    console.log('場景初始化完成');
 }
 
 // 建立瞄準圈
 function createReticle() {
-    const geometry = new THREE.RingGeometry(0.15, 0.2, 32);
-    geometry.rotateX(-Math.PI / 2);
+    const geometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
     const material = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.7
+        opacity: 0.5
     });
     reticle = new THREE.Mesh(geometry, material);
     reticle.matrixAutoUpdate = false;
     reticle.visible = false;
     scene.add(reticle);
+
+    console.log('Reticle 已建立');
 }
 
 // 建立訊號點標記
@@ -130,12 +136,13 @@ function createMarker(position) {
     // 增加動畫效果
     animateMarkerAppearance(markerGroup);
 
+    console.log(`訊號點 #${markerCount + 1} 已建立在:`, position);
+
     return markerGroup;
 }
 
 // 標記出現動畫
 function animateMarkerAppearance(marker) {
-    const originalScale = { x: 1, y: 1, z: 1 };
     marker.scale.set(0, 0, 0);
 
     const duration = 500; // 毫秒
@@ -150,11 +157,7 @@ function animateMarkerAppearance(marker) {
             ? 1 - Math.pow(1 - progress, 3) 
             : 1;
         
-        marker.scale.set(
-            originalScale.x * easeProgress,
-            originalScale.y * easeProgress,
-            originalScale.z * easeProgress
-        );
+        marker.scale.set(easeProgress, easeProgress, easeProgress);
 
         if (progress < 1) {
             requestAnimationFrame(animate);
@@ -166,6 +169,11 @@ function animateMarkerAppearance(marker) {
 
 // 放置標記
 function placeMarker() {
+    if (!isARActive) {
+        alert('請先啟動 AR');
+        return;
+    }
+
     if (reticle && reticle.visible) {
         const position = new THREE.Vector3();
         position.setFromMatrixPosition(reticle.matrix);
@@ -175,6 +183,8 @@ function placeMarker() {
         updateUI();
         
         console.log(`訊號點 #${markerCount} 已放置在:`, position);
+    } else {
+        alert('請對準地面後再點擊按鈕');
     }
 }
 
@@ -203,78 +213,83 @@ function onWindowResize() {
 // 啟動 AR Session
 async function activateXR() {
     try {
-        console.log('開始啟動 AR...');
+        console.log('正在啟動 AR...');
         
         // 檢查瀏覽器支援
         if (!navigator.xr) {
+            alert('您的瀏覽器不支援 WebXR。請使用 Chrome Android。');
             updateStatus(false, '不支援 WebXR');
-            alert('您的瀏覽器不支援 WebXR。請使用支援 AR 的瀏覽器(如 Chrome Android)。');
             return;
         }
 
         // 檢查 AR 支援
         const supported = await navigator.xr.isSessionSupported('immersive-ar');
-        console.log('AR 支援:', supported);
+        console.log('AR 支援檢查結果:', supported);
         
         if (!supported) {
-            updateStatus(false, '不支援 AR');
             alert('您的裝置不支援 AR 功能。');
+            updateStatus(false, '不支援 AR');
             return;
         }
 
         // 請求 XR Session
-        console.log('要求 XR Session...');
-        xrSession = await navigator.xr.requestSession('immersive-ar', {
+        const sessionInit = {
             requiredFeatures: ['hit-test'],
             optionalFeatures: ['dom-overlay', 'dom-overlay-for-handheld-ar'],
             domOverlay: { root: document.body }
-        });
+        };
 
+        console.log('正在請求 XR Session 並使用參數:', sessionInit);
+        xrSession = await navigator.xr.requestSession('immersive-ar', sessionInit);
         console.log('XR Session 已建立:', xrSession);
-
-        // 獲取參考空間
-        referenceSpace = await xrSession.requestReferenceSpace('local');
-        console.log('參考空間已建立:', referenceSpace);
 
         // 設定 renderer
         await renderer.xr.setSession(xrSession);
-        console.log('Renderer 已設定');
+        console.log('Renderer XR session 已設定');
+
+        // 獲取參考空間
+        try {
+            xrRefSpace = await xrSession.requestReferenceSpace('local');
+            console.log('參考空間 (local) 已取得:', xrRefSpace);
+        } catch (e) {
+            console.warn('無法取得 local 參考空間，嘗試 viewer:', e);
+            xrRefSpace = await xrSession.requestReferenceSpace('viewer');
+            console.log('參考空間 (viewer) 已取得:', xrRefSpace);
+        }
 
         // Session 結束時的處理
         xrSession.addEventListener('end', onSessionEnded);
 
         // 更新 UI
         startButton.textContent = '🛑 結束 AR';
-        startButton.onclick = () => {
-            if (xrSession) {
-                xrSession.end();
-            }
-        };
         markerButton.disabled = false;
-        instructionElement.textContent = '將相機對準地面,等待白色圓圈出現後點擊「放置訊號點」';
+        instructionElement.textContent = '將相機對準地面，等待白色圓圈出現後點擊「放置訊號點」';
         updateStatus(true, 'AR 已啟動');
+        isARActive = true;
+
+        console.log('AR 已成功啟動');
 
         // 開始渲染循環
-        renderer.setAnimationLoop(render);
+        renderer.setAnimationLoop((time, frame) => render(time, frame));
 
     } catch (error) {
         console.error('啟動 AR 時發生錯誤:', error);
-        updateStatus(false, '啟動失敗: ' + error.message);
         alert('啟動 AR 失敗: ' + error.message);
+        updateStatus(false, '啟動失敗: ' + error.message);
     }
 }
 
 // Session 結束處理
 function onSessionEnded() {
     console.log('AR Session 已結束');
+    
     xrSession = null;
     hitTestSource = null;
     hitTestSourceRequested = false;
     firstMarkerPlaced = false;
-    referenceSpace = null;
+    isARActive = false;
 
     startButton.textContent = '🚀 開始 AR';
-    startButton.onclick = activateXR;
     markerButton.disabled = true;
     instructionElement.textContent = '點擊「開始 AR」來啟動體驗';
     updateStatus(false, '已結束');
@@ -283,24 +298,31 @@ function onSessionEnded() {
 }
 
 // 渲染循環
-function render(timestamp, frame) {
-    if (!frame) {
-        console.warn('frame 為空');
-        renderer.render(scene, camera);
-        return;
-    }
+function render(time, frame) {
+    if (!frame || !xrRefSpace) return;
 
     // 初始化 hit test source
-    if (!hitTestSourceRequested && referenceSpace) {
-        console.log('要求 Hit Test Source...');
+    if (!hitTestSourceRequested) {
+        console.log('正在初始化 hit test source...');
         
         xrSession.requestHitTestSource({ 
-            space: referenceSpace
+            space: xrRefSpace
         }).then((source) => {
-            console.log('Hit Test Source 已取得:', source);
             hitTestSource = source;
+            console.log('Hit test source 已建立:', source);
         }).catch((error) => {
             console.warn('Hit test source 請求失敗:', error);
+            
+            // 嘗試備用方法
+            xrSession.requestHitTestSource({ 
+                space: xrRefSpace,
+                entityTypes: ['plane']
+            }).then((source) => {
+                hitTestSource = source;
+                console.log('使用備用參數的 Hit test source 已建立:', source);
+            }).catch((err) => {
+                console.error('備用 hit test source 也失敗了:', err);
+            });
         });
 
         hitTestSourceRequested = true;
@@ -312,7 +334,7 @@ function render(timestamp, frame) {
 
         if (hitTestResults.length > 0) {
             const hit = hitTestResults[0];
-            const pose = hit.getPose(referenceSpace);
+            const pose = hit.getPose(xrRefSpace);
 
             if (pose) {
                 // 更新瞄準圈位置
@@ -321,7 +343,6 @@ function render(timestamp, frame) {
 
                 // 第一次偵測到地面時,自動放置第一個標記
                 if (!firstMarkerPlaced) {
-                    console.log('第一次偵測到地面,放置第一個標記');
                     placeMarker();
                     firstMarkerPlaced = true;
                     instructionElement.textContent = '第一個訊號點已放置!移動後可繼續放置更多訊號點';
@@ -332,14 +353,15 @@ function render(timestamp, frame) {
         }
     }
 
-    // 為標記添加發光效果
+    // 為標記添加脈衝發光效果
     markers.forEach((marker, index) => {
-        // 頂部球體發光效果
-        const sphere = marker.children[1];
-        if (sphere) {
-            const pulseSpeed = 2;
-            const pulseIntensity = 0.3 + Math.sin(timestamp * 0.001 * pulseSpeed + index) * 0.2;
-            sphere.material.emissiveIntensity = pulseIntensity;
+        if (marker.children.length > 1) {
+            const sphere = marker.children[1];
+            if (sphere && sphere.material) {
+                const pulseSpeed = 2;
+                const pulseIntensity = 0.3 + Math.sin(time * 0.001 * pulseSpeed + index) * 0.2;
+                sphere.material.emissiveIntensity = pulseIntensity;
+            }
         }
     });
 
@@ -347,12 +369,19 @@ function render(timestamp, frame) {
 }
 
 // 初始化應用程式
-console.log('應用程式啟動中...');
+console.log('頁面已加載，開始初始化應用程式...');
 init();
 
 // 按鈕事件監聽
-startButton.addEventListener('click', activateXR);
-markerButton.addEventListener('click', placeMarker);
+startButton.addEventListener('click', () => {
+    console.log('開始按鈕被點擊');
+    activateXR();
+});
+
+markerButton.addEventListener('click', () => {
+    console.log('放置訊號點按鈕被點擊');
+    placeMarker();
+});
 
 // 更新初始狀態
 updateStatus(false, '未啟動');
