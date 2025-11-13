@@ -3,18 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="//cdn.jsdelivr.net/npm/eruda"></script>
-    <script>eruda.init();</script>
     <title>AR 訊號點標記</title>
     <style>
         body {
             margin: 0;
             font-family: Arial, sans-serif;
+            overflow: hidden;
         }
         #container {
             position: relative;
             width: 100vw;
             height: 100vh;
+            pointer-events: none;
+        }
+        #container canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
         }
         #startButton, #placeMarkerButton {
             position: fixed;
