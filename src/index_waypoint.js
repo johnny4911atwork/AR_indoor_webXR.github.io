@@ -32,7 +32,6 @@ function init() {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
-    renderer.domElement.style.pointerEvents = 'none';
     
     document.getElementById('container').appendChild(renderer.domElement);
     
@@ -168,6 +167,9 @@ async function startAR() {
         log('Setting XR session to renderer...');
         await renderer.xr.setSession(session);
         log('Renderer XR session set');
+        
+        // 確保 Canvas 不會攔截點擊事件
+        renderer.domElement.style.pointerEvents = 'none';
 
         // 嘗試不同的參考空間
         try {
