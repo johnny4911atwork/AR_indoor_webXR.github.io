@@ -113,22 +113,15 @@ function placeMarker() {
     markerCount++;
     const marker = createMarker(markerCount);
     
-    // 根據相機當前的位置和方向放置標記
-    // 在相機前方 1.5 米處,接近地面
-    const forward = new THREE.Vector3(0, 0, -1);
-    forward.applyQuaternion(camera.quaternion);
-    forward.y = 0; // 保持在水平面上
-    forward.normalize();
-    
+    // 在腳下放置標記（相機下方）
     marker.position.copy(camera.position);
-    marker.position.add(forward.multiplyScalar(1.5)); // 前方 1.5 米
-    marker.position.y = camera.position.y - 1.2; // 地面高度 (相機下方約 1.2 米)
+    marker.position.y = camera.position.y - 1.6; // 腳下約 1.6 米
     
     scene.add(marker);
     markers.push(marker);
     
     updateMarkerCount();
-    info.textContent = `已放置訊號點 #${markerCount} (前方 1.5m)`;
+    info.textContent = `已放置訊號點 #${markerCount} (腳下)`;
     log(`Marker ${markerCount} placed at (${marker.position.x.toFixed(2)}, ${marker.position.y.toFixed(2)}, ${marker.position.z.toFixed(2)})`);
     log(`Camera at (${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`);
 }
@@ -171,23 +164,23 @@ async function startAR() {
 
         // 嘗試不同的參考空間
         try {
-            log('Trying local-floor...');
-            refSpace = await session.requestReferenceSpace('local-floor');
-            log('Using local-floor reference space');
+            log('Trying viewer...');
+            refSpace = await session.requestReferenceSpace('viewer');
+            log('Using viewer reference space');
         } catch (e) {
-            log('local-floor failed, trying local...');
+            log('viewer failed, trying local-floor...');
             try {
-                refSpace = await session.requestReferenceSpace('local');
-                log('Using local reference space');
+                refSpace = await session.requestReferenceSpace('local-floor');
+                log('Using local-floor reference space');
             } catch (e2) {
-                log('local failed, trying unbounded...');
+                log('local-floor failed, trying local...');
                 try {
+                    refSpace = await session.requestReferenceSpace('local');
+                    log('Using local reference space');
+                } catch (e3) {
+                    log('local failed, trying unbounded...');
                     refSpace = await session.requestReferenceSpace('unbounded');
                     log('Using unbounded reference space');
-                } catch (e3) {
-                    log('unbounded failed, using viewer...');
-                    refSpace = await session.requestReferenceSpace('viewer');
-                    log('Using viewer reference space');
                 }
             }
         }
