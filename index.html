@@ -211,11 +211,11 @@
                 }
 
                 session = await navigator.xr.requestSession('immersive-ar', {
-                    requiredFeatures: ['local', 'hit-test']
+                    requiredFeatures: ['viewer']
                 });
 
                 await renderer.xr.setSession(session);
-                refSpace = await session.requestReferenceSpace('local');
+                refSpace = await session.requestReferenceSpace('viewer');
 
                 session.addEventListener('end', () => {
                     session = null;
