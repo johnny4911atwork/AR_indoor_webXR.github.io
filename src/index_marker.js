@@ -179,17 +179,28 @@ function animateMarkerAppearance(marker) {
 }
 
 // 放置標記
-function placeMarker() {
-    if (reticle && reticle.visible) {
-        const position = new THREE.Vector3();
+function placeMarker(useCamera = false) {
+    let position = new THREE.Vector3();
+    
+    if (useCamera || !reticle || !reticle.visible) {
+        // 如果沒有 hit test 或瞄準圈不可見,在相機前方 1.5 米處放置
+        camera.getWorldPosition(position);
+        const direction = new THREE.Vector3(0, 0, -1);
+        direction.applyQuaternion(camera.quaternion);
+        direction.y = 0; // 保持在地平面
+        direction.normalize();
+        position.add(direction.multiplyScalar(1.5));
+        position.y = 0; // 設定在地面高度
+    } else {
+        // 使用 reticle 位置
         position.setFromMatrixPosition(reticle.matrix);
-        
-        createMarker(position);
-        markerCount++;
-        updateUI();
-        
-        console.log(`訊號點 #${markerCount} 已放置在:`, position);
     }
+    
+    createMarker(position);
+    markerCount++;
+    updateUI();
+    
+    console.log(`訊號點 #${markerCount} 已放置在:`, position);
 }
 
 // 更新 UI
@@ -230,10 +241,10 @@ async function activateXR() {
             return;
         }
 
-        // 請求 XR Session
+        // 請求 XR Session (hit-test 設為 optional 而非 required)
         xrSession = await navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: ['hit-test'],
-            optionalFeatures: ['dom-overlay'],
+            requiredFeatures: [],
+            optionalFeatures: ['hit-test', 'dom-overlay'],
             domOverlay: { root: document.body }
         });
 
@@ -247,7 +258,7 @@ async function activateXR() {
         startButton.textContent = '🛑 結束 AR';
         startButton.onclick = () => xrSession.end();
         markerButton.disabled = false;
-        instructionElement.textContent = '將相機對準地面,等待白色圓圈出現後點擊「放置訊號點」';
+        instructionElement.textContent = '將相機對準地面,白色圓圈會顯示放置位置';
         updateStatus(true, 'AR 已啟動');
 
         // 開始渲染循環
@@ -281,12 +292,16 @@ function render(timestamp, frame) {
     if (frame) {
         // 初始化 hit test source
         if (!hitTestSourceRequested) {
-            const referenceSpace = renderer.xr.getReferenceSpace();
-            
             xrSession.requestReferenceSpace('viewer').then((referenceSpace) => {
                 xrSession.requestHitTestSource({ space: referenceSpace }).then((source) => {
                     hitTestSource = source;
+                }).catch((error) => {
+                    console.error('Hit test source 請求失敗:', error);
+                    instructionElement.textContent = '此裝置不支援地面偵測功能';
                 });
+            }).catch((error) => {
+                console.error('Reference space 請求失敗:', error);
+                instructionElement.textContent = '此裝置不支援所需的參考空間';
             });
 
             hitTestSourceRequested = true;
@@ -306,12 +321,19 @@ function render(timestamp, frame) {
 
                 // 第一次偵測到地面時,自動放置第一個標記
                 if (!firstMarkerPlaced) {
-                    placeMarker();
+                    placeMarker(false);
                     firstMarkerPlaced = true;
                     instructionElement.textContent = '第一個訊號點已放置!移動後可繼續放置更多訊號點';
                 }
             } else {
                 reticle.visible = false;
+            }
+        } else {
+            // 如果沒有 hit test,第一次進入時自動在相機前方放置標記
+            if (!firstMarkerPlaced && frame.session) {
+                placeMarker(true);
+                firstMarkerPlaced = true;
+                instructionElement.textContent = '第一個訊號點已放置!點擊按鈕在前方放置更多訊號點';
             }
         }
 
