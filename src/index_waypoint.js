@@ -202,12 +202,17 @@ async function startAR() {
             placeMarkerButton.style.display = 'none';
             markerCountDiv.style.display = 'none';
             info.textContent = 'AR 已結束';
+            // 移除點擊事件監聽
+            document.removeEventListener('click', handleARTap);
         });
 
         startButton.style.display = 'none';
-        placeMarkerButton.style.display = 'block';
+        placeMarkerButton.style.display = 'none';  // 在 AR 模式中隱藏按鈕
         markerCountDiv.style.display = 'block';
-        info.textContent = '移動到想要的位置後,點擊「放置訊號點」';
+        info.textContent = '✋ 點擊螢幕放置訊號點';
+        
+        // 在 AR 模式中監聽點擊事件
+        document.addEventListener('click', handleARTap);
 
         log('Starting animation loop...');
         renderer.setAnimationLoop(render);
@@ -230,6 +235,16 @@ function render(timestamp, frame) {
         }
     }
     renderer.render(scene, camera);
+}
+
+// 在 AR 模式中點擊螢幕放置訊號點
+function handleARTap(event) {
+    if (!session || !refSpace) {
+        return;
+    }
+    
+    // 在 AR 模式下，直接在相機前方放置標記
+    placeMarker();
 }
 
 // 檢查 WebXR 支援
