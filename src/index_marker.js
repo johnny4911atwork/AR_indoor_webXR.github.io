@@ -241,12 +241,12 @@ async function activateXR() {
             return;
         }
 
-        // 請求 XR Session (hit-test 設為 optional 而非 required)
-        xrSession = await navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: [],
-            optionalFeatures: ['hit-test', 'dom-overlay'],
-            domOverlay: { root: document.body }
-        });
+        // 請求 XR Session
+        session = await navigator.xr.requestSession('immersive-ar', {
+                        requiredFeatures: ['viewer'],
+                        optionalFeatures: ['dom-overlay', 'hit-test', 'anchors'],
+                        domOverlay: { root: document.body }
+                    });
 
         // 設定 renderer
         await renderer.xr.setSession(xrSession);
