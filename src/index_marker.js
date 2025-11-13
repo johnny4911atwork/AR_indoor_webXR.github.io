@@ -242,7 +242,7 @@ async function activateXR() {
         }
 
         // 請求 XR Session
-        session = await navigator.xr.requestSession('immersive-ar', {
+        xrSession = await navigator.xr.requestSession('immersive-ar', {
                         requiredFeatures: ['viewer'],
                         optionalFeatures: ['dom-overlay', 'hit-test', 'anchors'],
                         domOverlay: { root: document.body }
