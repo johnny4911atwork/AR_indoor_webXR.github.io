@@ -75,7 +75,7 @@ function createMarker(number) {
     });
     const textGeometry = new THREE.PlaneGeometry(0.15, 0.15);
     const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-    textMesh.position.y = 0.01;
+    textMesh.position.y = 0.18;
     textMesh.rotation.x = -Math.PI / 2;
     textMesh.position.z = 0.001;
     group.add(textMesh);
