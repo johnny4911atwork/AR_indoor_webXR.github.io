@@ -54,10 +54,13 @@ function createMarker(label = '') {
         color,
         emissive: color,
         emissiveIntensity: 0.6,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
+        transparent: true, // 啟用透明
+        opacity: 0.8       // 設定透明度
     });
     const circle = new THREE.Mesh(circleGeometry, circleMaterial);
     circle.rotation.x = -Math.PI / 2;
+    circle.position.y = -0.001;
     group.add(circle);
 
     // 編號文字平面
@@ -77,7 +80,7 @@ function createMarker(label = '') {
         transparent: true,
         side: THREE.DoubleSide
     });
-    const textGeometry = new THREE.PlaneGeometry(0.15, 0.15);
+    const textGeometry = new THREE.PlaneGeometry(0.3, 0.3);
     const textMesh = new THREE.Mesh(textGeometry, textMaterial);
     textMesh.position.y = 0.01;
     textMesh.rotation.x = -Math.PI / 2;
