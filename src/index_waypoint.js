@@ -63,7 +63,7 @@ function createMarker(label = '') {
     canvas.height = 128;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'Bold 36px Arial';
+    ctx.font = 'Bold 12px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, 64, 64);
