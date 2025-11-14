@@ -41,7 +41,7 @@ function init() {
 
 // 創建訊號點標記
 // 建立單一訊號點的 3D 造型 (底座 + 柱 + 球 + 編號貼圖)
-function createMarker(number) {
+function createMarker(label = '') {
     const group = new THREE.Group();
 
     const color = new THREE.Color(Math.random(), Math.random(), Math.random());
@@ -62,10 +62,10 @@ function createMarker(number) {
     canvas.height = 128;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'Bold 80px Arial';
+    ctx.font = 'Bold 36px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(number.toString(), 64, 64);
+    ctx.fillText(label, 64, 64);
 
     const texture = new THREE.CanvasTexture(canvas);
     const textMaterial = new THREE.MeshBasicMaterial({ 
@@ -75,7 +75,7 @@ function createMarker(number) {
     });
     const textGeometry = new THREE.PlaneGeometry(0.15, 0.15);
     const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-    textMesh.position.y = 0.18;
+    textMesh.position.y = 0.001;
     //textMesh.rotation.x = -Math.PI / 2;
     textMesh.position.z = 0.001;
     group.add(textMesh);
@@ -92,17 +92,18 @@ function placeMarker() {
     }
 
     markerCount++;
-    const marker = createMarker(markerCount);
-    
-    // 在腳下放置標記（相機下方）
-    marker.position.copy(camera.position);
-    marker.position.y = camera.position.y - 1.6; // 腳下約 1.6 米
+    const markerPosition = camera.position.clone();
+    markerPosition.y = camera.position.y - 1.6; // 腳下約 1.6 米
+
+    const coordLabel = `(${markerPosition.x.toFixed(2)}, ${markerPosition.y.toFixed(2)}, ${markerPosition.z.toFixed(2)})`;
+    const marker = createMarker(coordLabel);
+    marker.position.copy(markerPosition);
     
     scene.add(marker);
     markers.push(marker);
     
     updateMarkerCount();
-    info.textContent = `已放置訊號點 #${markerCount} (腳下)`;
+    info.textContent = `已放置訊號點 #${markerCount}（${coordLabel}）`;
     log(`Marker ${markerCount} placed at (${marker.position.x.toFixed(2)}, ${marker.position.y.toFixed(2)}, ${marker.position.z.toFixed(2)})`);
     log(`Camera at (${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`);
 }
