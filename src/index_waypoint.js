@@ -74,7 +74,7 @@ function createMarker(label = '') {
         transparent: true,
         side: THREE.DoubleSide
     });
-    const textGeometry = new THREE.PlaneGeometry(0.15, 0.15);
+    const textGeometry = new THREE.PlaneGeometry(0.5, 0.5);
     const textMesh = new THREE.Mesh(textGeometry, textMaterial);
     textMesh.position.y = 0.01;
     textMesh.rotation.x = -Math.PI / 2;
