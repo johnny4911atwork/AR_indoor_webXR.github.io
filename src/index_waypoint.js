@@ -1,5 +1,5 @@
-// 引入 Three.js
-import * as THREE from "https://esm.sh/three";
+// 引入 Three.js (使用 CDN 版本 r128 模組)
+import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
 
 // 全域變數：基本渲染與 XR 會話狀態
 let camera, scene, renderer;          // Three.js 基本場景與相機、渲染器
@@ -7,13 +7,9 @@ let session = null;                   // WebXR 目前的 AR 會話
 let refSpace = null;                  // 參考座標空間 (viewer / local-floor 等)
 let markers = [];                     // 已放置的訊號點物件集合
 let markerCount = 0;                  // 訊號點累計數量
-let savedMarkers = [];                // 儲存的訊號點資料
 
 const startButton = document.getElementById('startButton');
 const placeMarkerButton = document.getElementById('placeMarkerButton');
-const saveButton = document.getElementById('saveButton');
-const downloadButton = document.getElementById('downloadButton');
-const clearButton = document.getElementById('clearButton');
 const info = document.getElementById('info');
 const markerCountDiv = document.getElementById('markerCount');
 
@@ -27,7 +23,7 @@ function log(msg) {
 function init() {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-    
+
     // 添加環境光
     const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
     light.position.set(0.5, 1, 0.25);
@@ -37,14 +33,14 @@ function init() {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
-    
+
     document.getElementById('container').appendChild(renderer.domElement);
-    
+
     log('Three.js initialized');
 }
 
 // 創建訊號點標記
-// 建立單一訊號點的 3D 造型 
+// 建立單一訊號點的 3D 造型 (底座 + 柱 + 球 + 編號貼圖)
 function createMarker(label = '') {
     const group = new THREE.Group();
 
@@ -54,14 +50,11 @@ function createMarker(label = '') {
         color,
         emissive: color,
         emissiveIntensity: 0.6,
-        side: THREE.DoubleSide,
-        transparent: true, // 啟用透明
-        opacity: 0.8       // 設定透明度
+        side: THREE.DoubleSide
     });
     const circle = new THREE.Mesh(circleGeometry, circleMaterial);
     circle.rotation.x = -Math.PI / 2;
     circle.position.y = 0;
-    circle.position.z = -0.01; // 圓形放在後面
     group.add(circle);
 
     // 編號文字平面
@@ -81,11 +74,11 @@ function createMarker(label = '') {
         transparent: true,
         side: THREE.DoubleSide
     });
-    const textGeometry = new THREE.PlaneGeometry(0.3, 0.3);
+    const textGeometry = new THREE.PlaneGeometry(0.15, 0.15);
     const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-    textMesh.position.y = 0;
+    textMesh.position.y = 0.01;
     textMesh.rotation.x = -Math.PI / 2;
-    textMesh.position.z = 0.01; // 文字放在前面
+    textMesh.position.z = 0;
     group.add(textMesh);
 
     return group;
@@ -106,10 +99,10 @@ function placeMarker() {
     const coordLabel = `(${markerPosition.x.toFixed(2)}, ${markerPosition.y.toFixed(2)}, ${markerPosition.z.toFixed(2)})`;
     const marker = createMarker(coordLabel);
     marker.position.copy(markerPosition);
-    
+
     scene.add(marker);
     markers.push(marker);
-    
+
     updateMarkerCount();
     info.textContent = `已放置訊號點 #${markerCount}（${coordLabel}）`;
     log(`Marker ${markerCount} placed at (${marker.position.x.toFixed(2)}, ${marker.position.y.toFixed(2)}, ${marker.position.z.toFixed(2)})`);
@@ -119,87 +112,13 @@ function placeMarker() {
 // 更新 UI 顯示目前訊號點數量
 function updateMarkerCount() {
     markerCountDiv.textContent = `訊號點數量: ${markerCount}`;
-    // 顯示/隱藏儲存按鈕
-    if (markerCount > 0 && session) {
-        saveButton.style.display = 'inline-block';
-        clearButton.style.display = 'inline-block';
-    } else {
-        saveButton.style.display = 'none';
-        clearButton.style.display = 'none';
-    }
-    // 顯示/隱藏下載按鈕
-    if (savedMarkers.length > 0) {
-        downloadButton.style.display = 'inline-block';
-    } else {
-        downloadButton.style.display = 'none';
-    }
-}
-
-// 儲存所有訊號點
-function saveAllMarkers() {
-    if (markers.length === 0) {
-        info.textContent = '❌ 沒有訊號點可以儲存';
-        return;
-    }
-
-    // 將目前的訊號點資料儲存
-    const markerData = markers.map((marker, index) => ({
-        id: index + 1,
-        position: {
-            x: marker.position.x,
-            y: marker.position.y,
-            z: marker.position.z
-        },
-        label: `標記 ${index + 1}`,
-        timestamp: new Date().toISOString()
-    }));
-
-    savedMarkers = [...markerData];
-    
-    info.textContent = `✅ 已儲存 ${savedMarkers.length} 個訊號點到記憶體`;
-    log(`Saved ${savedMarkers.length} markers`);
-    updateMarkerCount();
-}
-
-// 下載訊號點為 JSON 檔案
-function downloadMarkersAsJSON() {
-    if (savedMarkers.length === 0) {
-        info.textContent = '❌ 沒有儲存的訊號點';
-        return;
-    }
-
-    const dataStr = JSON.stringify(savedMarkers, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `markers_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    info.textContent = `📥 已下載 ${savedMarkers.length} 個訊號點`;
-    log(`Downloaded ${savedMarkers.length} markers`);
-}
-
-// 清除所有訊號點
-function clearAllMarkers() {
-    if (confirm('確定要清除所有訊號點嗎？')) {
-        markers.forEach(marker => scene.remove(marker));
-        markers = [];
-        markerCount = 0;
-        updateMarkerCount();
-        info.textContent = '✨ 已清除所有訊號點';
-        log('All markers cleared');
-    }
 }
 
 // 開始 AR 會話
 // 啟動 AR：檢查支援、建立會話、選擇參考空間、啟動渲染迴圈
 async function startAR() {
     log('Starting AR...');
-    
+
     if (!navigator.xr) {
         info.textContent = '您的裝置不支援 WebXR';
         log('ERROR: WebXR not supported');
@@ -236,8 +155,6 @@ async function startAR() {
             refSpace = null;
             startButton.style.display = 'block';
             placeMarkerButton.style.display = 'none';
-            saveButton.style.display = 'none';
-            clearButton.style.display = 'none';
             markerCountDiv.style.display = 'none';
             info.textContent = 'AR 已結束';
         });
@@ -245,7 +162,6 @@ async function startAR() {
         startButton.style.display = 'none';
         placeMarkerButton.style.display = 'block';
         markerCountDiv.style.display = 'block';
-        updateMarkerCount();
         info.textContent = '移動到想要的位置後,點擊「放置訊號點」';
 
         log('Starting animation loop...');
@@ -282,10 +198,10 @@ async function checkWebXRSupport() {
     }
 
     log('WebXR available, checking AR support...');
-    
+
     try {
         const arSupported = await navigator.xr.isSessionSupported('immersive-ar');
-        
+
         if (arSupported) {
             info.textContent = '✅ 您的裝置支援 AR,點擊開始';
             startButton.style.display = 'block';
@@ -303,9 +219,6 @@ async function checkWebXRSupport() {
 // 事件監聽
 startButton.addEventListener('click', startAR);
 placeMarkerButton.addEventListener('click', placeMarker);
-saveButton.addEventListener('click', saveAllMarkers);
-downloadButton.addEventListener('click', downloadMarkersAsJSON);
-clearButton.addEventListener('click', clearAllMarkers);
 
 // 初始化
 init();
