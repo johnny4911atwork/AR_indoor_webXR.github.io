@@ -60,8 +60,8 @@ function createMarker(label = '') {
     });
     const circle = new THREE.Mesh(circleGeometry, circleMaterial);
     circle.rotation.x = -Math.PI / 2;
-    circle.position.y = -0.001;
-    circle.position.z = 0;
+    circle.position.y = 0;
+    circle.position.z = -0.01; // 圓形放在後面
     group.add(circle);
 
     // 編號文字平面
@@ -79,15 +79,13 @@ function createMarker(label = '') {
     const textMaterial = new THREE.MeshBasicMaterial({ 
         map: texture, 
         transparent: true,
-        side: THREE.DoubleSide,
-        depthTest: false
+        side: THREE.DoubleSide
     });
     const textGeometry = new THREE.PlaneGeometry(0.3, 0.3);
     const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-    textMesh.position.y = 0.005;
+    textMesh.position.y = 0;
     textMesh.rotation.x = -Math.PI / 2;
-    textMesh.position.z = 0;
-    textMesh.renderOrder = 1;
+    textMesh.position.z = 0.01; // 文字放在前面
     group.add(textMesh);
 
     return group;
