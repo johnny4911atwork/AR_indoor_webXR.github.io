@@ -1,5 +1,5 @@
-// 引入 Three.js (使用 CDN 版本 r128 模組)
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
+// 引入 Three.js
+import * as THREE from "https://esm.sh/three";
 
 // 全域變數：基本渲染與 XR 會話狀態
 let camera, scene, renderer;          // Three.js 基本場景與相機、渲染器
@@ -7,9 +7,13 @@ let session = null;                   // WebXR 目前的 AR 會話
 let refSpace = null;                  // 參考座標空間 (viewer / local-floor 等)
 let markers = [];                     // 已放置的訊號點物件集合
 let markerCount = 0;                  // 訊號點累計數量
+let savedMarkers = [];                // 儲存的訊號點資料
 
 const startButton = document.getElementById('startButton');
 const placeMarkerButton = document.getElementById('placeMarkerButton');
+const saveButton = document.getElementById('saveButton');
+const downloadButton = document.getElementById('downloadButton');
+const clearButton = document.getElementById('clearButton');
 const info = document.getElementById('info');
 const markerCountDiv = document.getElementById('markerCount');
 
@@ -40,7 +44,7 @@ function init() {
 }
 
 // 創建訊號點標記
-// 建立單一訊號點的 3D 造型 (底座 + 柱 + 球 + 編號貼圖)
+// 建立單一訊號點的 3D 造型 
 function createMarker(label = '') {
     const group = new THREE.Group();
 
@@ -111,6 +115,80 @@ function placeMarker() {
 // 更新 UI 顯示目前訊號點數量
 function updateMarkerCount() {
     markerCountDiv.textContent = `訊號點數量: ${markerCount}`;
+    // 顯示/隱藏儲存按鈕
+    if (markerCount > 0 && session) {
+        saveButton.style.display = 'inline-block';
+        clearButton.style.display = 'inline-block';
+    } else {
+        saveButton.style.display = 'none';
+        clearButton.style.display = 'none';
+    }
+    // 顯示/隱藏下載按鈕
+    if (savedMarkers.length > 0) {
+        downloadButton.style.display = 'inline-block';
+    } else {
+        downloadButton.style.display = 'none';
+    }
+}
+
+// 儲存所有訊號點
+function saveAllMarkers() {
+    if (markers.length === 0) {
+        info.textContent = '❌ 沒有訊號點可以儲存';
+        return;
+    }
+
+    // 將目前的訊號點資料儲存
+    const markerData = markers.map((marker, index) => ({
+        id: index + 1,
+        position: {
+            x: marker.position.x,
+            y: marker.position.y,
+            z: marker.position.z
+        },
+        label: `標記 ${index + 1}`,
+        timestamp: new Date().toISOString()
+    }));
+
+    savedMarkers = [...markerData];
+    
+    info.textContent = `✅ 已儲存 ${savedMarkers.length} 個訊號點到記憶體`;
+    log(`Saved ${savedMarkers.length} markers`);
+    updateMarkerCount();
+}
+
+// 下載訊號點為 JSON 檔案
+function downloadMarkersAsJSON() {
+    if (savedMarkers.length === 0) {
+        info.textContent = '❌ 沒有儲存的訊號點';
+        return;
+    }
+
+    const dataStr = JSON.stringify(savedMarkers, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `markers_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    info.textContent = `📥 已下載 ${savedMarkers.length} 個訊號點`;
+    log(`Downloaded ${savedMarkers.length} markers`);
+}
+
+// 清除所有訊號點
+function clearAllMarkers() {
+    if (confirm('確定要清除所有訊號點嗎？')) {
+        markers.forEach(marker => scene.remove(marker));
+        markers = [];
+        markerCount = 0;
+        updateMarkerCount();
+        info.textContent = '✨ 已清除所有訊號點';
+        log('All markers cleared');
+    }
 }
 
 // 開始 AR 會話
@@ -154,6 +232,8 @@ async function startAR() {
             refSpace = null;
             startButton.style.display = 'block';
             placeMarkerButton.style.display = 'none';
+            saveButton.style.display = 'none';
+            clearButton.style.display = 'none';
             markerCountDiv.style.display = 'none';
             info.textContent = 'AR 已結束';
         });
@@ -161,6 +241,7 @@ async function startAR() {
         startButton.style.display = 'none';
         placeMarkerButton.style.display = 'block';
         markerCountDiv.style.display = 'block';
+        updateMarkerCount();
         info.textContent = '移動到想要的位置後,點擊「放置訊號點」';
 
         log('Starting animation loop...');
@@ -218,6 +299,9 @@ async function checkWebXRSupport() {
 // 事件監聽
 startButton.addEventListener('click', startAR);
 placeMarkerButton.addEventListener('click', placeMarker);
+saveButton.addEventListener('click', saveAllMarkers);
+downloadButton.addEventListener('click', downloadMarkersAsJSON);
+clearButton.addEventListener('click', clearAllMarkers);
 
 // 初始化
 init();
