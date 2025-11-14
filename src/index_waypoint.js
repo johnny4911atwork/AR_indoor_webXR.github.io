@@ -44,38 +44,17 @@ function init() {
 function createMarker(number) {
     const group = new THREE.Group();
 
-    // 底座圓盤 - 加大並增加發光效果
-    const baseGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.03, 32);
-    const baseMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0x2196F3,
-        emissive: 0x2196F3,
-        emissiveIntensity: 0.8,
-        shininess: 100
+    const color = new THREE.Color(Math.random(), Math.random(), Math.random());
+    const circleGeometry = new THREE.CircleGeometry(0.22, 32);
+    const circleMaterial = new THREE.MeshPhongMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 0.6,
+        side: THREE.DoubleSide
     });
-    const base = new THREE.Mesh(baseGeometry, baseMaterial);
-    group.add(base);
-
-    // 中心圓柱 - 加粗並增加發光
-    const poleGeometry = new THREE.CylinderGeometry(0.03, 0.03, 0.4, 16);
-    const poleMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0xFFEB3B,
-        emissive: 0xFFEB3B,
-        emissiveIntensity: 0.9
-    });
-    const pole = new THREE.Mesh(poleGeometry, poleMaterial);
-    pole.position.y = 0.2;
-    group.add(pole);
-
-    // 頂部球體 - 加大
-    const sphereGeometry = new THREE.SphereGeometry(0.08, 16, 16);
-    const sphereMaterial = new THREE.MeshPhongMaterial({ 
-        color: 0xFF5722,
-        emissive: 0xFF5722,
-        emissiveIntensity: 1.0
-    });
-    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-    sphere.position.y = 0.45;
-    group.add(sphere);
+    const circle = new THREE.Mesh(circleGeometry, circleMaterial);
+    circle.rotation.x = -Math.PI / 2;
+    group.add(circle);
 
     // 編號文字平面
     const canvas = document.createElement('canvas');
@@ -96,7 +75,7 @@ function createMarker(number) {
     });
     const textGeometry = new THREE.PlaneGeometry(0.15, 0.15);
     const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-    textMesh.position.y = 0.15;
+    textMesh.position.y = 0.01;
     textMesh.rotation.x = -Math.PI / 2;
     textMesh.position.z = 0.001;
     group.add(textMesh);
