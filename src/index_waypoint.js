@@ -1,24 +1,25 @@
+// 引入 Three.js (使用 CDN 版本 r128 模組)
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
 
-let camera, scene, renderer;
-let session = null;
-let refSpace = null;
-let markers = [];
-let markerCount = 0;
+// 全域變數：基本渲染與 XR 會話狀態
+let camera, scene, renderer;          // Three.js 基本場景與相機、渲染器
+let session = null;                   // WebXR 目前的 AR 會話
+let refSpace = null;                  // 參考座標空間 (viewer / local-floor 等)
+let markers = [];                     // 已放置的訊號點物件集合
+let markerCount = 0;                  // 訊號點累計數量
 
 const startButton = document.getElementById('startButton');
 const placeMarkerButton = document.getElementById('placeMarkerButton');
 const info = document.getElementById('info');
 const markerCountDiv = document.getElementById('markerCount');
-const debugDiv = document.getElementById('debug');
 
+// 簡單除錯輸出：僅同步到 console
 function log(msg) {
     console.log(msg);
-    debugDiv.innerHTML += msg + '<br>';
-    debugDiv.style.display = 'block';
 }
 
 // 初始化場景
+// 初始化 Three.js 場景與基礎光源、XR 設定
 function init() {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
@@ -39,6 +40,7 @@ function init() {
 }
 
 // 創建訊號點標記
+// 建立單一訊號點的 3D 造型 (底座 + 柱 + 球 + 編號貼圖)
 function createMarker(number) {
     const group = new THREE.Group();
 
@@ -102,7 +104,7 @@ function createMarker(number) {
     return group;
 }
 
-// 放置訊號點
+// 放置訊號點：以目前相機位置為基準，落在「腳下」高度
 function placeMarker() {
     if (!session || !refSpace) {
         log('Session or refSpace not available');
@@ -126,11 +128,13 @@ function placeMarker() {
     log(`Camera at (${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)})`);
 }
 
+// 更新 UI 顯示目前訊號點數量
 function updateMarkerCount() {
     markerCountDiv.textContent = `訊號點數量: ${markerCount}`;
 }
 
 // 開始 AR 會話
+// 啟動 AR：檢查支援、建立會話、選擇參考空間、啟動渲染迴圈
 async function startAR() {
     log('Starting AR...');
     
@@ -141,20 +145,11 @@ async function startAR() {
     }
 
     try {
-        log('Checking AR support...');
-        const supported = await navigator.xr.isSessionSupported('immersive-ar');
-        log(`AR supported: ${supported}`);
-        
-        if (!supported) {
-            info.textContent = '您的裝置不支援 AR 模式';
-            return;
-        }
-
         log('Requesting AR session...');
         session = await navigator.xr.requestSession('immersive-ar', {
-            requiredFeatures: ['dom-overlay'],
+            requiredFeatures: ['dom-overlay'],      // 啟用 DOM Overlay 讓原生按鈕可見
             domOverlay: { root: document.getElementById('container') },
-            optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
+            optionalFeatures: ['local-floor']
         });
         log('AR session created');
 
@@ -164,25 +159,13 @@ async function startAR() {
 
         // 嘗試不同的參考空間
         try {
-            log('Trying viewer...');
-            refSpace = await session.requestReferenceSpace('viewer');
-            log('Using viewer reference space');
+            log('Trying local-floor...');
+            refSpace = await session.requestReferenceSpace('local-floor');
+            log('Using local-floor reference space');
         } catch (e) {
-            log('viewer failed, trying local-floor...');
-            try {
-                refSpace = await session.requestReferenceSpace('local-floor');
-                log('Using local-floor reference space');
-            } catch (e2) {
-                log('local-floor failed, trying local...');
-                try {
-                    refSpace = await session.requestReferenceSpace('local');
-                    log('Using local reference space');
-                } catch (e3) {
-                    log('local failed, trying unbounded...');
-                    refSpace = await session.requestReferenceSpace('unbounded');
-                    log('Using unbounded reference space');
-                }
-            }
+            log('local-floor failed, trying viewer...');
+                refSpace = await session.requestReferenceSpace('viewer');
+                log('Using viewer reference space');
         }
 
         session.addEventListener('end', () => {
@@ -210,6 +193,7 @@ async function startAR() {
     }
 }
 
+// 每一幀的渲染：更新相機姿態後繪製場景
 function render(timestamp, frame) {
     if (frame && refSpace) {
         const pose = frame.getViewerPose(refSpace);
@@ -224,6 +208,7 @@ function render(timestamp, frame) {
 }
 
 // 檢查 WebXR 支援
+// 啟動前檢查裝置與瀏覽器是否支援 WebXR AR 會話
 async function checkWebXRSupport() {
     if (!navigator.xr) {
         info.textContent = '❌ 您的瀏覽器不支援 WebXR';
